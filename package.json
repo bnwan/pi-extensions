@@ -1,0 +1,16 @@
+{
+  "name": "pi-extensions",
+  "private": true,
+  "packageManager": "bun@1.2.21",
+  "workspaces": [
+    "extensions/*"
+  ],
+  "scripts": {
+    "test": "bun run --filter '*' test",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
