@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findIssueWorktree, parseGitWorktreeList } from "../src/git";
+import { buildIssueBranchName, findIssueWorktree, parseGitWorktreeList } from "../src/git";
 
 describe("parseGitWorktreeList", () => {
   it("parses git worktree porcelain output", () => {
@@ -48,6 +48,14 @@ describe("parseGitWorktreeList", () => {
         detached: false,
       },
     ]);
+  });
+});
+
+describe("buildIssueBranchName", () => {
+  it("builds the preferred issue branch name", () => {
+    expect(buildIssueBranchName("pi-extensions", 123, "fix-search-ranking")).toBe(
+      "pi-extensions/issue-123-fix-search-ranking",
+    );
   });
 });
 
