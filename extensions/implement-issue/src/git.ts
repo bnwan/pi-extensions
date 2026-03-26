@@ -60,6 +60,10 @@ export function buildIssueBranchName(repoName: string, issueNumber: number, slug
   return `${repoName}/issue-${issueNumber}-${slug}`;
 }
 
+export function buildIssueWorktreePath(repoName: string, issueNumber: number, slug: string): string {
+  return `../${repoName}-issue-${issueNumber}-${slug}`;
+}
+
 export function findIssueWorktree(worktrees: GitWorktree[], issueNumber: number): GitWorktree | null {
   const branchMarker = `/issue-${issueNumber}-`;
   const pathMarker = `-issue-${issueNumber}-`;
