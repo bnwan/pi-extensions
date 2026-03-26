@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { parseGitWorktreeList } from "../src/git";
-
 import { findIssueWorktree, parseGitWorktreeList } from "../src/git";
 
 describe("parseGitWorktreeList", () => {
