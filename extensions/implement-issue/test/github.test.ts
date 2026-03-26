@@ -30,4 +30,18 @@ describe("normalizeGitHubIssue", () => {
       body: null,
     });
   });
+
+  it("trims surrounding whitespace from issue titles", () => {
+    expect(
+      normalizeGitHubIssue({
+        number: 125,
+        title: "  Tidy docs  ",
+        body: null,
+      }),
+    ).toEqual({
+      number: 125,
+      title: "Tidy docs",
+      body: null,
+    });
+  });
 });

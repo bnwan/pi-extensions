@@ -9,7 +9,7 @@ export function normalizeGitHubIssue(input: {
 
   return {
     number: input.number,
-    title: input.title,
+    title: input.title.trim(),
     body,
   };
 }
