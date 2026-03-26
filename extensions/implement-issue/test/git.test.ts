@@ -76,6 +76,12 @@ describe("buildIssueWorktreePath", () => {
       "../pi-extensions-issue-123-fix-search-ranking",
     );
   });
+
+  it("falls back to an issue-only worktree path when repo name is blank", () => {
+    expect(buildIssueWorktreePath("", 123, "fix-search-ranking")).toBe(
+      "../issue-123-fix-search-ranking",
+    );
+  });
 });
 
 describe("findIssueWorktree", () => {
