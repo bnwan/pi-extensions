@@ -57,7 +57,12 @@ export function parseGitWorktreeList(output: string): GitWorktree[] {
 }
 
 export function findIssueWorktree(worktrees: GitWorktree[], issueNumber: number): GitWorktree | null {
-  const marker = `/issue-${issueNumber}-`;
+  const branchMarker = `/issue-${issueNumber}-`;
+  const pathMarker = `-issue-${issueNumber}-`;
 
-  return worktrees.find((worktree) => worktree.branch?.includes(marker) ?? false) ?? null;
+  return (
+    worktrees.find((worktree) => worktree.branch?.includes(branchMarker) ?? false) ??
+    worktrees.find((worktree) => worktree.path.includes(pathMarker)) ??
+    null
+  );
 }
