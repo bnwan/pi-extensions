@@ -57,7 +57,7 @@ export function parseGitWorktreeList(output: string): GitWorktree[] {
 }
 
 export function buildIssueBranchName(repoName: string, issueNumber: number, slug: string): string {
-  return `${repoName}/issue-${issueNumber}-${slug}`;
+  return repoName ? `${repoName}/issue-${issueNumber}-${slug}` : `issue-${issueNumber}-${slug}`;
 }
 
 export function buildIssueWorktreePath(repoName: string, issueNumber: number, slug: string): string {

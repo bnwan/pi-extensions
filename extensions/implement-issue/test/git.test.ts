@@ -62,6 +62,12 @@ describe("buildIssueBranchName", () => {
       "pi-extensions/issue-123-fix-search-ranking",
     );
   });
+
+  it("falls back to an issue-only branch name when repo name is blank", () => {
+    expect(buildIssueBranchName("", 123, "fix-search-ranking")).toBe(
+      "issue-123-fix-search-ranking",
+    );
+  });
 });
 
 describe("buildIssueWorktreePath", () => {
