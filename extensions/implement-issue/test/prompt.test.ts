@@ -29,6 +29,7 @@ describe("buildImplementIssuePrompt", () => {
     });
 
     expect(prompt).toContain("Load and follow the implementer skill");
+    expect(prompt).toContain("/skill:implementer");
     expect(prompt).toContain("Issue #123: Fix search ranking");
     expect(prompt).toContain("Repo: pi-extensions");
     expect(prompt).toContain("Worktree path: /Users/bnwaneampeh/projects/pi-extensions-issue-123-fix-search-ranking");

@@ -9,6 +9,7 @@ export function buildImplementIssuePrompt(input: ImplementIssuePromptInput): str
 
   return [
     "Load and follow the implementer skill.",
+    "Use /skill:implementer before doing any implementation work.",
     "",
     `Issue #${issue.number}: ${issue.title}`,
     `Repo: ${repo.name}`,
