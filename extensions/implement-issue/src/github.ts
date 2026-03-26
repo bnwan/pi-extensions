@@ -5,9 +5,11 @@ export function normalizeGitHubIssue(input: {
   title: string;
   body: string | null;
 }): GitHubIssue {
+  const body = input.body?.trim() ? input.body.trim() : null;
+
   return {
     number: input.number,
     title: input.title,
-    body: input.body,
+    body,
   };
 }

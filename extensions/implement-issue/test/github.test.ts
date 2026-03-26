@@ -16,4 +16,18 @@ describe("normalizeGitHubIssue", () => {
       body: "Search results are ordered incorrectly.",
     });
   });
+
+  it("normalizes blank issue bodies to null", () => {
+    expect(
+      normalizeGitHubIssue({
+        number: 124,
+        title: "Tidy docs",
+        body: "   ",
+      }),
+    ).toEqual({
+      number: 124,
+      title: "Tidy docs",
+      body: null,
+    });
+  });
 });
