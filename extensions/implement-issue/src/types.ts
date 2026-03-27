@@ -1,5 +1,5 @@
 export type ImplementIssueFlags = {
-  yes: boolean;
+  confirm: boolean;
   resume: boolean;
   noWorktree: boolean;
   noInstall: boolean;

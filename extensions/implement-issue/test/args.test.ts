@@ -6,7 +6,7 @@ describe("parseImplementIssueArgs", () => {
   it("parses an issue number with no flags", () => {
     expect(parseImplementIssueArgs("123")).toEqual({
       issueNumber: 123,
-      yes: false,
+      confirm: false,
       resume: false,
       noWorktree: false,
       noInstall: false,
@@ -15,9 +15,9 @@ describe("parseImplementIssueArgs", () => {
   });
 
   it("parses flags in mixed order", () => {
-    expect(parseImplementIssueArgs("--resume 456 --plan-only --yes")).toEqual({
+    expect(parseImplementIssueArgs("--resume 456 --plan-only --no")).toEqual({
       issueNumber: 456,
-      yes: true,
+      confirm: true,
       resume: true,
       noWorktree: false,
       noInstall: false,
@@ -34,11 +34,11 @@ describe("parseImplementIssueArgs", () => {
   });
 
   it("rejects single-dash flags with a clear error", () => {
-    expect(() => parseImplementIssueArgs("123 -y")).toThrow("Unknown flag: -y");
+    expect(() => parseImplementIssueArgs("123 -n")).toThrow("Unknown flag: -n");
   });
 
   it("rejects missing issue numbers", () => {
-    expect(() => parseImplementIssueArgs("--yes")).toThrow("Issue number is required");
+    expect(() => parseImplementIssueArgs("--no")).toThrow("Issue number is required");
   });
 
   it("rejects duplicate issue numbers", () => {

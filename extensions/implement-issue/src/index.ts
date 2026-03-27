@@ -7,7 +7,7 @@ export default function implementIssueExtension(pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       if (!args?.trim()) {
         ctx.ui.notify(
-          "Usage: /implement-issue <issue-number> [--yes] [--resume] [--no-worktree] [--no-install] [--plan-only]",
+          "Usage: /implement-issue <issue-number> [--no] [--resume] [--no-worktree] [--no-install] [--plan-only]",
           "info"
         );
         return;

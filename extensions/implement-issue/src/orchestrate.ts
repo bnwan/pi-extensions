@@ -79,7 +79,7 @@ export async function orchestrate(
   let finalBranch: string;
 
   if (existing) {
-    if (!options.resume && !options.yes) {
+    if (options.confirm && !options.resume) {
       const ok = await ui.confirm(
         `Issue #${issue.number} worktree found`,
         `Reuse existing worktree at ${existing.path}?`
@@ -94,7 +94,7 @@ export async function orchestrate(
     finalBranch = branch;
     ui.notify("Skipping worktree creation (--no-worktree)", "info");
   } else {
-    if (!options.yes) {
+    if (options.confirm) {
       const ok = await ui.confirm(
         `Create worktree for issue #${issue.number}`,
         `Create worktree at ${resolvedWorktreePath} on branch ${branch}?`

@@ -1,7 +1,7 @@
 import type { ImplementIssueOptions } from "./types";
 
 const FLAG_MAP = {
-  "--yes": "yes",
+  "--no": "confirm",
   "--resume": "resume",
   "--no-worktree": "noWorktree",
   "--no-install": "noInstall",
@@ -15,7 +15,7 @@ export function parseImplementIssueArgs(input: string): ImplementIssueOptions {
 
   const options: ImplementIssueOptions = {
     issueNumber: 0,
-    yes: false,
+    confirm: false,
     resume: false,
     noWorktree: false,
     noInstall: false,

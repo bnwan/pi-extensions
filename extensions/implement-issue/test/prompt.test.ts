@@ -20,7 +20,7 @@ describe("buildImplementIssuePrompt", () => {
       },
       options: {
         issueNumber: 123,
-        yes: false,
+        confirm: false,
         resume: true,
         noWorktree: false,
         noInstall: false,
@@ -54,7 +54,7 @@ describe("buildImplementIssuePrompt", () => {
       },
       options: {
         issueNumber: 456,
-        yes: true,
+        confirm: true,
         resume: false,
         noWorktree: false,
         noInstall: false,
@@ -71,7 +71,7 @@ describe("buildImplementIssuePrompt", () => {
       issue: { number: 789, title: "Empty body issue", body: null },
       repo: { name: "my-repo", rootPath: "/repo" },
       worktree: { path: "/repo-issue-789-empty-body-issue", branch: "my-repo/issue-789-empty-body-issue" },
-      options: { issueNumber: 789, yes: false, resume: false, noWorktree: false, noInstall: false, planOnly: false },
+      options: { issueNumber: 789, confirm: false, resume: false, noWorktree: false, noInstall: false, planOnly: false },
     });
 
     expect(prompt).toContain("No issue body provided.");
