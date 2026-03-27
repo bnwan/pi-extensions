@@ -131,4 +131,14 @@ describe("findIssueWorktree", () => {
       detached: true,
     });
   });
+
+  it("returns null when no matching worktree exists", () => {
+    const worktrees = parseGitWorktreeList([
+      "worktree /repo",
+      "HEAD abcdef1234567890",
+      "branch refs/heads/main",
+    ].join("\n"));
+
+    expect(findIssueWorktree(worktrees, 999)).toBeNull();
+  });
 });

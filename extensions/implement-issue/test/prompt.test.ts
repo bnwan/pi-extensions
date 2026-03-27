@@ -65,4 +65,15 @@ describe("buildImplementIssuePrompt", () => {
     expect(prompt).toContain("Stop after producing the implementation plan and wait for user approval.");
     expect(prompt).not.toContain("Begin the TDD implementation workflow after the plan is approved.");
   });
+
+  it("renders a fallback when issue body is null", () => {
+    const prompt = buildImplementIssuePrompt({
+      issue: { number: 789, title: "Empty body issue", body: null },
+      repo: { name: "my-repo", rootPath: "/repo" },
+      worktree: { path: "/repo-issue-789-empty-body-issue", branch: "my-repo/issue-789-empty-body-issue" },
+      options: { issueNumber: 789, yes: false, resume: false, noWorktree: false, noInstall: false, planOnly: false },
+    });
+
+    expect(prompt).toContain("No issue body provided.");
+  });
 });

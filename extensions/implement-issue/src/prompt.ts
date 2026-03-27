@@ -2,7 +2,7 @@ import type { ImplementIssuePromptInput } from "./types";
 
 export function buildImplementIssuePrompt(input: ImplementIssuePromptInput): string {
   const { issue, repo, worktree, options } = input;
-  const issueBody = issue.body?.trim() || "No issue body provided.";
+  const issueBody = issue.body || "No issue body provided.";
   const executionInstruction = options.planOnly
     ? "Stop after producing the implementation plan and wait for user approval."
     : "Begin the TDD implementation workflow after the plan is approved.";

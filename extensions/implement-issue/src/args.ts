@@ -29,7 +29,7 @@ export function parseImplementIssueArgs(input: string): ImplementIssueOptions {
       continue;
     }
 
-    if (token.startsWith("--")) {
+    if (token.startsWith("-")) {
       throw new Error(`Unknown flag: ${token}`);
     }
 

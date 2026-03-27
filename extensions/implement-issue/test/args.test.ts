@@ -33,7 +33,15 @@ describe("parseImplementIssueArgs", () => {
     expect(() => parseImplementIssueArgs("123 --wat")).toThrow("Unknown flag: --wat");
   });
 
+  it("rejects single-dash flags with a clear error", () => {
+    expect(() => parseImplementIssueArgs("123 -y")).toThrow("Unknown flag: -y");
+  });
+
   it("rejects missing issue numbers", () => {
     expect(() => parseImplementIssueArgs("--yes")).toThrow("Issue number is required");
+  });
+
+  it("rejects duplicate issue numbers", () => {
+    expect(() => parseImplementIssueArgs("123 456")).toThrow("Issue number must be provided only once");
   });
 });
