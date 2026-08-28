@@ -11,6 +11,7 @@ Monorepo for Pi extensions.
 ## Current extensions
 
 - `implement-issue` — global `/implement-issue <issue-number>` workflow extension
+- `epic-next` — tools (`epic_next_picks`, `epic_spawn`, `epic_check`, `epic_teardown`) + `/epic-check` command backing the `epic-next` orchestrator skill: live state sync, parallel-safe pick computation, living-plan-comment patching, visible herdr agent spawns with equal-width pane math, and post-merge teardown
 
 ## Development
 

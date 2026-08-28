@@ -1,0 +1,128 @@
+import {
+  AGENT_PREFIX,
+  DEFAULT_BASE_BRANCH,
+} from "./constants";
+import {
+  buildIssueBranch,
+  buildIssueWorktreePath,
+  parseGitWorktreeList,
+  repoNameFromRoot,
+} from "./git";
+import {
+  herdrAgentPrompt,
+  herdrAgentStart,
+  herdrPaneClose,
+  herdrPaneLayout,
+  herdrPaneSplit,
+  isAgentStartTimeout,
+  isHerdrEnv,
+} from "./herdr";
+import { buildSpawnPrompt } from "./prompts";
+import { computeSplitPlan } from "./split";
+import { shell, shellOrThrow } from "./shell";
+import type { SpawnRecord } from "./types";
+
+export type SpawnOptions = {
+  issue: number;
+  cwd: string;
+  /** High-risk pick: the agent stops before PR creation for a manual review. */
+  gate?: boolean;
+  /**
+   * Number of agent panes this invocation will end up adding, including this
+   * one — used to equalize pane widths (1→2, 1→2→3, re-spawn flows).
+   */
+  remaining?: number;
+  /** Split direction: "right" (default, equal columns) or "down" (narrow tabs). */
+  direction?: "right" | "down";
+  /** Base branch for the issue worktree (default "main"). */
+  baseBranch?: string;
+  notify?: (message: string) => void;
+};
+
+/**
+ * Spawn one pick as a visible pi agent (skill Step 6): plain `git worktree add`
+ * for isolation, a sibling pane in the CURRENT tab via herdr, a pi agent
+ * started with --approve, and the implementer prompt fired without --wait so
+ * multiple agents run in parallel.
+ */
+export function spawnPick(options: SpawnOptions): SpawnRecord {
+  if (!isHerdrEnv()) {
+    throw new Error(
+      "epic_spawn requires running inside Herdr (HERDR_ENV=1). Start pi inside herdr to spawn visible agents.",
+    );
+  }
+
+  const notify = options.notify ?? (() => {});
+  const repoRoot = shellOrThrow(["git", "rev-parse", "--show-toplevel"], options.cwd);
+  const repoName = repoNameFromRoot(repoRoot);
+  const branch = buildIssueBranch(repoName, options.issue);
+  const worktree = buildIssueWorktreePath(repoRoot, repoName, options.issue);
+
+  // Never double-assign: refuse when the issue already has a worktree/branch.
+  const worktrees = parseGitWorktreeList(
+    shellOrThrow(["git", "worktree", "list", "--porcelain"], options.cwd),
+  );
+  if (worktrees.some((w) => w.branch === branch || w.path === worktree)) {
+    throw new Error(`Issue #${options.issue} already has a worktree/branch (${branch}) — it is in flight.`);
+  }
+
+  notify(`Creating worktree ${worktree} on ${branch}…`);
+  const base = options.baseBranch ?? DEFAULT_BASE_BRANCH;
+  shellOrThrow(["git", "worktree", "add", "-b", branch, worktree, base], options.cwd);
+
+  // Sibling pane in the current tab, equal-width via split ratios.
+  notify("Splitting a sibling pane…");
+  const layout = herdrPaneLayout();
+  const plan = computeSplitPlan(
+    layout.panes,
+    layout.totalWidth,
+    Math.max(1, options.remaining ?? 1),
+  );
+  const pane = herdrPaneSplit({
+    pane: plan.paneId,
+    direction: options.direction ?? "right",
+    ratio: plan.ratio,
+    cwd: worktree,
+  });
+  if (!pane) {
+    throw new Error(`herdr pane split did not return a pane id (split ${plan.paneId} ratio ${plan.ratio})`);
+  }
+
+  // Start the pi agent. -- --approve trusts the fresh worktree non-interactively.
+  const agent = `${AGENT_PREFIX}${options.issue}`;
+  notify(`Starting pi agent ${agent} in pane ${pane}…`);
+  let start = herdrAgentStart(agent, pane);
+  if (start.exitCode !== 0 || isAgentStartTimeout(start)) {
+    // A fresh-shell startup nag (e.g. an oh-my-zsh update prompt) can eat the
+    // launch input. Read the pane and retry once (skill Step 6 recovery).
+    const tail = shell(["herdr", "pane", "read", pane, "--source", "visible", "--lines", "30"]);
+    start = herdrAgentStart(agent, pane);
+    if (start.exitCode !== 0 || isAgentStartTimeout(start)) {
+      throw new Error(
+        [
+          `herdr agent start failed for ${agent} in pane ${pane}.`,
+          start.stderr || start.stdout,
+          `Pane tail (inspect for a startup nag): ${tail.stdout.slice(-500)}`,
+        ].join("\n"),
+      );
+    }
+  }
+
+  // Drive it: the agent follows /skill:implementer end-to-end. Fire WITHOUT
+  // --wait so multiple agents run in parallel.
+  notify(`Prompting ${agent} (gate=${options.gate === true})…`);
+  herdrAgentPrompt(
+    agent,
+    buildSpawnPrompt({ issue: options.issue, worktree, gate: options.gate === true }),
+  );
+
+  return {
+    issue: options.issue,
+    agent,
+    worktree,
+    branch,
+    pane,
+    gate: options.gate === true,
+    spawnedAt: new Date().toISOString(),
+  };
+}
