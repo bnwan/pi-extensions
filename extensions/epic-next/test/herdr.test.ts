@@ -89,9 +89,12 @@ describe("parseAgentList", () => {
     ]);
   });
 
-  it("tolerates malformed output", () => {
-    expect(parseAgentList("not json")).toEqual([]);
+  it("returns [] when the result has no agents array", () => {
     expect(parseAgentList(JSON.stringify({ result: {} }))).toEqual([]);
+  });
+
+  it("throws a clear error on malformed JSON instead of silently returning []", () => {
+    expect(() => parseAgentList("not json")).toThrow(/Failed to parse herdr agent list/);
   });
 });
 
@@ -106,8 +109,15 @@ describe("parsePaneLayout", () => {
     });
   });
 
-  it("tolerates malformed output", () => {
-    expect(parsePaneLayout("not json")).toEqual({ totalWidth: 0, panes: [] });
+  it("returns an empty layout when fields are missing", () => {
+    expect(parsePaneLayout(JSON.stringify({ result: { layout: {} } }))).toEqual({
+      totalWidth: 0,
+      panes: [],
+    });
+  });
+
+  it("throws a clear error on malformed JSON", () => {
+    expect(() => parsePaneLayout("not json")).toThrow(/Failed to parse herdr pane layout/);
   });
 });
 
@@ -119,6 +129,9 @@ describe("parseSplitPaneId", () => {
 
   it("returns null when there is no pane in the result", () => {
     expect(parseSplitPaneId(JSON.stringify({ result: {} }))).toBeNull();
-    expect(parseSplitPaneId("not json")).toBeNull();
+  });
+
+  it("throws a clear error on malformed JSON", () => {
+    expect(() => parseSplitPaneId("not json")).toThrow(/Failed to parse herdr pane split/);
   });
 });

@@ -1,13 +1,14 @@
+import { AGENT_PREFIX } from "./constants";
 import {
   buildIssueBranch,
   buildIssueWorktreePath,
   issueFromBranch,
   parseGitWorktreeList,
+  parseOwnerRepo,
   repoNameFromRoot,
 } from "./git";
-import { listOpenPRs } from "./github";
+import { findMergedPR, listOpenPRs } from "./github";
 import { herdrAgentGet, herdrAgentList, herdrPaneClose } from "./herdr";
-import { AGENT_PREFIX } from "./constants";
 import { shell, shellOrThrow } from "./shell";
 import type { CheckRow } from "./types";
 
@@ -15,10 +16,7 @@ import type { CheckRow } from "./types";
  * Live status of in-flight epic work (skill "Monitoring"): every issue with a
  * signal — herdr agent, worktree, or open PR — with its agent state.
  */
-export function runEpicCheck(cwd: string): { rows: CheckRow[]; herdrAvailable: boolean } {
-  const repoRoot = shellOrThrow(["git", "rev-parse", "--show-toplevel"], cwd);
-  const repoName = repoNameFromRoot(repoRoot);
-
+export function runEpicCheck(cwd: string): CheckRow[] {
   const agents = herdrAgentList();
   const worktrees = parseGitWorktreeList(
     shellOrThrow(["git", "worktree", "list", "--porcelain"], cwd),
@@ -64,23 +62,23 @@ export function runEpicCheck(cwd: string): { rows: CheckRow[]; herdrAvailable: b
     touch(issue).pr = pr.number;
   }
 
-  return { rows: [...rows.values()].sort((a, b) => a.issue - b.issue), herdrAvailable: agents.length >= 0 };
+  return [...rows.values()].sort((a, b) => a.issue - b.issue);
 }
 
-/**
- * Tear a merged issue down (skill Step 8 §4): close the agent pane (only the
- * one whose agent cwd is the issue worktree — never the user's panes), remove
- * the worktree, delete the local branch, prune.
- */
-export function teardownIssue(
-  issue: number,
-  cwd: string,
-): {
+export type TeardownResult = {
   closedPane: string | null;
   removedWorktree: string | null;
   deletedBranch: string | null;
   notes: string[];
-} {
+};
+
+/**
+ * Tear a merged issue down (skill Step 8 §4): close the agent pane (only the
+ * one whose agent cwd is the issue worktree — never the user's panes), remove
+ * the worktree, delete the local branch (only when a MERGED PR exists for it),
+ * and prune.
+ */
+export function teardownIssue(issue: number, cwd: string): TeardownResult {
   const notes: string[] = [];
   const repoRoot = shellOrThrow(["git", "rev-parse", "--show-toplevel"], cwd);
   const repoName = repoNameFromRoot(repoRoot);
@@ -107,7 +105,7 @@ export function teardownIssue(
     notes.push(`no herdr agent ${agentName} found — nothing to close`);
   }
 
-  // Remove the worktree from the MAIN worktree, delete the local branch, prune.
+  // Remove the worktree from the MAIN worktree first.
   let removedWorktree: string | null = null;
   const worktrees = parseGitWorktreeList(
     shellOrThrow(["git", "worktree", "list", "--porcelain"], cwd),
@@ -124,10 +122,25 @@ export function teardownIssue(
     notes.push(`no worktree found for ${branch} at ${worktree}`);
   }
 
+  // Delete the local branch — only when a MERGED PR exists for it, so an
+  // unmerged branch is never destroyed by a premature teardown.
   let deletedBranch: string | null = null;
-  const branchDelete = shell(["git", "branch", "-D", branch], repoRoot);
-  if (branchDelete.exitCode === 0) {
-    deletedBranch = branch;
+  const ownerRepo = parseOwnerRepo(
+    shellOrThrow(["git", "config", "--get", "remote.origin.url"], cwd),
+  );
+  const mergedPR =
+    ownerRepo !== null ? findMergedPR(ownerRepo, branch, repoRoot) : null;
+  if (mergedPR !== null) {
+    const branchDelete = shell(["git", "branch", "-D", branch], repoRoot);
+    if (branchDelete.exitCode === 0) {
+      deletedBranch = branch;
+    } else {
+      notes.push(`branch delete failed: ${branchDelete.stderr || branchDelete.stdout}`);
+    }
+  } else {
+    notes.push(
+      `local branch ${branch} NOT deleted — no merged PR found for it (delete manually if appropriate)`,
+    );
   }
 
   shell(["git", "worktree", "prune"], repoRoot);

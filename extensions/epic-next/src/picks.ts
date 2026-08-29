@@ -20,6 +20,9 @@ export type ComputePicksInput = {
  */
 export function computeNextPicks(input: ComputePicksInput): PicksResult {
   const { candidates, cap } = input;
+  if (!Number.isInteger(cap) || cap < 1) {
+    throw new Error(`cap must be a positive integer (got ${cap})`);
+  }
   const inFlightMap = new Map(input.inFlight.map((f) => [f.number, f.reason]));
 
   const blocked: BlockedEntry[] = [];
@@ -120,4 +123,9 @@ export function sharedInfraMatches(files: string[]): string[] {
 /** High-risk picks touch schema/db/types infra → recommend --gate (stop before PR). */
 export function isHighRisk(files: string[]): boolean {
   return HIGH_RISK_GLOBS.some((glob) => files.some((f) => matchesGlob(glob, f)));
+}
+
+/** Which high-risk globs a file set touches — used for report annotations. */
+export function highRiskMatches(files: string[]): string[] {
+  return HIGH_RISK_GLOBS.filter((glob) => files.some((f) => matchesGlob(glob, f)));
 }

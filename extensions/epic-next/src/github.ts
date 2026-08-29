@@ -1,4 +1,5 @@
 import { OPEN_ISSUE_LIMIT } from "./constants";
+import { expectArray, getPath, parseJsonValue } from "./json";
 import { shell, shellOrThrow } from "./shell";
 import type { OpenIssue, OpenPR } from "./types";
 
@@ -17,36 +18,48 @@ export function parseCrossRefNumbers(output: string): number[] {
 
 /**
  * Parse NDJSON objects printed by `gh api <endpoint> --paginate -q '.[] | {…}'`
- * (one JSON object per line, possibly across pages).
+ * (one JSON value per line, possibly across pages). Invalid lines throw with
+ * the offending snippet.
  */
-export function parseNdjson<T>(output: string): T[] {
+export function parseNdjson(output: string, context: string): unknown[] {
   return output
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as T);
+    .map((line) => parseJsonValue(line, context));
 }
-
-type RawAssignee = { login: string };
-type RawLabel = { name: string };
 
 export function listOpenPRs(cwd: string): OpenPR[] {
   const out = shellOrThrow(
-    ["gh", "pr", "list", "--state", "open", "--json", "number,headRefName,title,assignees"],
+    [
+      "gh",
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      String(OPEN_ISSUE_LIMIT),
+      "--json",
+      "number,headRefName,title,assignees",
+    ],
     cwd,
   );
-  type RawPR = {
-    number: number;
-    headRefName: string;
-    title: string;
-    assignees: RawAssignee[];
-  };
-  return (JSON.parse(out) as RawPR[]).map((pr) => ({
-    number: pr.number,
-    headRefName: pr.headRefName,
-    title: pr.title,
-    assignees: pr.assignees.map((a) => a.login),
-  }));
+  return expectArray(parseJsonValue(out, "gh pr list"), "gh pr list output").flatMap((raw) => {
+    const number = getPath(raw, "number");
+    const headRefName = getPath(raw, "headRefName");
+    const title = getPath(raw, "title");
+    if (typeof number !== "number" || typeof headRefName !== "string") {
+      return [];
+    }
+    const assigneesRaw = getPath(raw, "assignees");
+    const assignees = Array.isArray(assigneesRaw)
+      ? assigneesRaw.flatMap((a) => {
+          const login = getPath(a, "login");
+          return typeof login === "string" ? [login] : [];
+        })
+      : [];
+    return [{ number, headRefName, title: typeof title === "string" ? title : "", assignees }];
+  });
 }
 
 export function listOpenIssues(cwd: string, limit = OPEN_ISSUE_LIMIT): OpenIssue[] {
@@ -64,22 +77,41 @@ export function listOpenIssues(cwd: string, limit = OPEN_ISSUE_LIMIT): OpenIssue
     ],
     cwd,
   );
-  type RawIssue = {
-    number: number;
-    title: string;
-    body: string | null;
-    state: string;
-    labels: RawLabel[];
-    assignees: RawAssignee[];
-  };
-  return (JSON.parse(out) as RawIssue[]).map((issue) => ({
-    number: issue.number,
-    title: issue.title,
-    body: issue.body,
-    state: issue.state,
-    labels: issue.labels.map((l) => l.name),
-    assignees: issue.assignees.map((a) => a.login),
-  }));
+  return expectArray(parseJsonValue(out, "gh issue list"), "gh issue list output").flatMap(
+    (raw) => {
+      const number = getPath(raw, "number");
+      const title = getPath(raw, "title");
+      if (typeof number !== "number" || typeof title !== "string") {
+        return [];
+      }
+      const body = getPath(raw, "body");
+      const state = getPath(raw, "state");
+      const labelsRaw = getPath(raw, "labels");
+      const labels = Array.isArray(labelsRaw)
+        ? labelsRaw.flatMap((l) => {
+            const name = getPath(l, "name");
+            return typeof name === "string" ? [name] : [];
+          })
+        : [];
+      const assigneesRaw = getPath(raw, "assignees");
+      const assignees = Array.isArray(assigneesRaw)
+        ? assigneesRaw.flatMap((a) => {
+            const login = getPath(a, "login");
+            return typeof login === "string" ? [login] : [];
+          })
+        : [];
+      return [
+        {
+          number,
+          title,
+          body: typeof body === "string" ? body : null,
+          state: typeof state === "string" ? state : "",
+          labels,
+          assignees,
+        },
+      ];
+    },
+  );
 }
 
 /**
@@ -117,7 +149,37 @@ export function listIssueComments(
     ],
     cwd,
   );
-  return parseNdjson<{ id: number; body: string }>(out);
+  return parseNdjson(out, "gh api comments").flatMap((raw) => {
+    const id = getPath(raw, "id");
+    const body = getPath(raw, "body");
+    if (typeof id !== "number" || typeof body !== "string") {
+      return [];
+    }
+    return [{ id, body }];
+  });
+}
+
+/** The merged PR number for a branch, or null when there is none. */
+export function findMergedPR(ownerRepo: string, branch: string, cwd: string): number | null {
+  const out = shellOrThrow(
+    [
+      "gh",
+      "pr",
+      "list",
+      "--state",
+      "merged",
+      "--head",
+      branch,
+      "--json",
+      "number",
+      "-R",
+      ownerRepo,
+    ],
+    cwd,
+  );
+  const parsed = expectArray(parseJsonValue(out, "gh pr list --state merged"), "merged PR list");
+  const number = getPath(parsed[0], "number");
+  return typeof number === "number" ? number : null;
 }
 
 export function patchIssueComment(
@@ -127,7 +189,15 @@ export function patchIssueComment(
   cwd: string,
 ): void {
   shellOrThrow(
-    ["gh", "api", "-X", "PATCH", `repos/${ownerRepo}/issues/comments/${commentId}`, "-f", `body=${body}`],
+    [
+      "gh",
+      "api",
+      "-X",
+      "PATCH",
+      `repos/${ownerRepo}/issues/comments/${commentId}`,
+      "-f",
+      `body=${body}`,
+    ],
     cwd,
   );
 }

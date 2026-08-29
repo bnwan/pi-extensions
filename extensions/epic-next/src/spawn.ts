@@ -70,59 +70,86 @@ export function spawnPick(options: SpawnOptions): SpawnRecord {
   const base = options.baseBranch ?? DEFAULT_BASE_BRANCH;
   shellOrThrow(["git", "worktree", "add", "-b", branch, worktree, base], options.cwd);
 
-  // Sibling pane in the current tab, equal-width via split ratios.
-  notify("Splitting a sibling pane…");
-  const layout = herdrPaneLayout();
-  const plan = computeSplitPlan(
-    layout.panes,
-    layout.totalWidth,
-    Math.max(1, options.remaining ?? 1),
-  );
-  const pane = herdrPaneSplit({
-    pane: plan.paneId,
-    direction: options.direction ?? "right",
-    ratio: plan.ratio,
-    cwd: worktree,
-  });
-  if (!pane) {
-    throw new Error(`herdr pane split did not return a pane id (split ${plan.paneId} ratio ${plan.ratio})`);
-  }
-
-  // Start the pi agent. -- --approve trusts the fresh worktree non-interactively.
-  const agent = `${AGENT_PREFIX}${options.issue}`;
-  notify(`Starting pi agent ${agent} in pane ${pane}…`);
-  let start = herdrAgentStart(agent, pane);
-  if (start.exitCode !== 0 || isAgentStartTimeout(start)) {
-    // A fresh-shell startup nag (e.g. an oh-my-zsh update prompt) can eat the
-    // launch input. Read the pane and retry once (skill Step 6 recovery).
-    const tail = shell(["herdr", "pane", "read", pane, "--source", "visible", "--lines", "30"]);
-    start = herdrAgentStart(agent, pane);
-    if (start.exitCode !== 0 || isAgentStartTimeout(start)) {
+  let pane: string | null = null;
+  try {
+    // Sibling pane in the current tab, equal-width via split ratios.
+    notify("Splitting a sibling pane…");
+    const layout = herdrPaneLayout();
+    const plan = computeSplitPlan(
+      layout.panes,
+      layout.totalWidth,
+      Math.max(1, options.remaining ?? 1),
+    );
+    pane = herdrPaneSplit({
+      pane: plan.paneId,
+      direction: options.direction ?? "right",
+      ratio: plan.ratio,
+      cwd: worktree,
+    });
+    if (!pane) {
       throw new Error(
-        [
-          `herdr agent start failed for ${agent} in pane ${pane}.`,
-          start.stderr || start.stdout,
-          `Pane tail (inspect for a startup nag): ${tail.stdout.slice(-500)}`,
-        ].join("\n"),
+        `herdr pane split did not return a pane id (split ${plan.paneId} ratio ${plan.ratio})`,
       );
     }
+
+    // Start the pi agent. -- --approve trusts the fresh worktree non-interactively.
+    const agent = `${AGENT_PREFIX}${options.issue}`;
+    notify(`Starting pi agent ${agent} in pane ${pane}…`);
+    let start = herdrAgentStart(agent, pane);
+    if (isAgentStartTimeout(start)) {
+      // A fresh-shell startup nag (e.g. an oh-my-zsh update prompt) can eat the
+      // launch input and surface as a timeout — read the pane, retry once.
+      const tail = shell(["herdr", "pane", "read", pane, "--source", "visible", "--lines", "30"]);
+      start = herdrAgentStart(agent, pane);
+      if (isAgentStartTimeout(start)) {
+        throw new Error(
+          [
+            `herdr agent start timed out for ${agent} in pane ${pane}.`,
+            `Pane tail (inspect for a startup nag): ${tail.stdout.slice(-500)}`,
+          ].join("\n"),
+        );
+      }
+    } else if (start.exitCode !== 0) {
+      throw new Error(
+        `herdr agent start failed for ${agent} in pane ${pane}: ${start.stderr || start.stdout}`,
+      );
+    }
+
+    // Drive it: the agent follows /skill:implementer end-to-end. Fire WITHOUT
+    // --wait so multiple agents run in parallel.
+    notify(`Prompting ${agent} (gate=${options.gate === true})…`);
+    herdrAgentPrompt(
+      agent,
+      buildSpawnPrompt({ issue: options.issue, worktree, gate: options.gate === true }),
+    );
+
+    return {
+      issue: options.issue,
+      agent,
+      worktree,
+      branch,
+      pane,
+      gate: options.gate === true,
+      spawnedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    // Roll back everything this call created so a failed spawn never leaves an
+    // orphan that blocks future runs (the in-flight guard would refuse
+    // re-spawns): close the pane we split (kills a started agent), remove the
+    // worktree, delete the branch.
+    const paneClose = pane !== null ? herdrPaneClose(pane) : null;
+    const removeWorktree = shell(["git", "worktree", "remove", "--force", worktree], repoRoot);
+    const deleteBranch = shell(["git", "branch", "-D", branch], repoRoot);
+    const rollback =
+      removeWorktree.exitCode === 0 && deleteBranch.exitCode === 0
+        ? `Rolled back: removed worktree ${worktree} and deleted branch ${branch}${
+            paneClose !== null && paneClose.exitCode !== 0
+              ? ` (pane close failed: ${paneClose.stderr})`
+              : ""
+          }.`
+        : `Rollback INCOMPLETE (worktree ${worktree} may remain — remove it manually): ${removeWorktree.stderr} ${deleteBranch.stderr}`;
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\n${rollback}`,
+    );
   }
-
-  // Drive it: the agent follows /skill:implementer end-to-end. Fire WITHOUT
-  // --wait so multiple agents run in parallel.
-  notify(`Prompting ${agent} (gate=${options.gate === true})…`);
-  herdrAgentPrompt(
-    agent,
-    buildSpawnPrompt({ issue: options.issue, worktree, gate: options.gate === true }),
-  );
-
-  return {
-    issue: options.issue,
-    agent,
-    worktree,
-    branch,
-    pane,
-    gate: options.gate === true,
-    spawnedAt: new Date().toISOString(),
-  };
 }

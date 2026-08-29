@@ -41,6 +41,13 @@ describe("issueFromBranch / issueFromWorktreePath", () => {
   it("extracts issue numbers from implement-issue branches with slugs", () => {
     expect(issueFromBranch("markky/issue-866-fix-search-worker")).toBe(866);
     expect(issueFromBranch("repo/issue-123-some-slug")).toBe(123);
+    expect(issueFromBranch("hotfix/issue-866-x")).toBe(866);
+  });
+
+  it("does not match issue-N inside a larger segment", () => {
+    expect(issueFromBranch("feature/anti-issue-42")).toBeNull();
+    expect(issueFromBranch("no-issue-123")).toBeNull();
+    expect(issueFromBranch("pre-issue-8-labels")).toBeNull();
   });
 
   it("returns null for non-issue branches", () => {
@@ -48,7 +55,7 @@ describe("issueFromBranch / issueFromWorktreePath", () => {
     expect(issueFromBranch("feature/foo")).toBeNull();
   });
 
-  it("extracts issue numbers from worktree paths", () => {
+  it("extracts issue numbers from worktree paths (leading - allowed)", () => {
     expect(issueFromWorktreePath("/Users/x/projects/markky-issue-866")).toBe(866);
     expect(issueFromWorktreePath("/Users/x/projects/markky-issue-866-fix-search")).toBe(866);
     expect(issueFromWorktreePath("/Users/x/projects/markky")).toBeNull();
@@ -56,10 +63,10 @@ describe("issueFromBranch / issueFromWorktreePath", () => {
 });
 
 describe("issue branch and worktree naming", () => {
-  it("builds the epic-next skill's names", () => {
+  it("builds the epic-next skill's names (worktree path RESOLVED for herdr/git comparison)", () => {
     expect(buildIssueBranch("markky", 866)).toBe("markky/issue-866");
     expect(buildIssueWorktreePath("/Users/x/projects/markky", "markky", 866)).toBe(
-      "/Users/x/projects/markky/../markky-issue-866",
+      "/Users/x/projects/markky-issue-866",
     );
   });
 });

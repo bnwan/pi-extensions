@@ -14,15 +14,15 @@ describe("parseCrossRefNumbers", () => {
 });
 
 describe("parseNdjson", () => {
-  it("parses one JSON object per line", () => {
+  it("parses one JSON value per line", () => {
     const output = ['{"id":1,"body":"a"}', '{"id":2,"body":"b"}'].join("\n");
-    expect(parseNdjson<{ id: number; body: string }>(output)).toEqual([
+    expect(parseNdjson(output, "test")).toEqual([
       { id: 1, body: "a" },
       { id: 2, body: "b" },
     ]);
   });
 
   it("returns empty for empty output", () => {
-    expect(parseNdjson("")).toEqual([]);
+    expect(parseNdjson("", "test")).toEqual([]);
   });
 });

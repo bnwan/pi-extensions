@@ -5,6 +5,7 @@ import {
 } from "./report";
 import {
   buildStatusBlock,
+  carriesSpawnDirective,
   extractNextUp,
   extractStatusRegion,
   findPlanComment,
@@ -12,12 +13,10 @@ import {
 } from "./comment";
 import { DEFAULT_CAP } from "./constants";
 import {
-  buildIssueWorktreePath,
   issueFromBranch,
   issueFromWorktreePath,
   parseGitWorktreeList,
   parseOwnerRepo,
-  repoNameFromRoot,
 } from "./git";
 import {
   createIssueComment,
@@ -73,6 +72,9 @@ export type PipelineResult = {
  */
 export function runEpicPipeline(options: PipelineOptions): PipelineResult {
   const cap = options.cap ?? DEFAULT_CAP;
+  if (!Number.isInteger(cap) || cap < 1) {
+    throw new Error(`cap must be a positive integer (got ${cap})`);
+  }
   const notes: string[] = [];
 
   // ── Repo context ─────────────────────────────────────────────────────────
@@ -82,7 +84,6 @@ export function runEpicPipeline(options: PipelineOptions): PipelineResult {
   if (!ownerRepo) {
     throw new Error(`Could not parse owner/repo from remote origin URL: ${remoteUrl}`);
   }
-  const repoName = repoNameFromRoot(repoRoot);
 
   // ── Step 1 — re-sync live state ──────────────────────────────────────────
   const openPRs = listOpenPRs(options.cwd);
@@ -194,10 +195,11 @@ export function runEpicPipeline(options: PipelineOptions): PipelineResult {
 
   // ── Steps 3+4 — compute parallel-safe picks ───────────────────────────────
   const openNumbers = new Set(openIssues.map((issue) => issue.number));
+  const candidateNumbers = new Set(candidates.map((c) => c.number));
   const picks = computeNextPicks({
     candidates,
     inFlight: [...inFlightMap.entries()]
-      .filter(([number]) => discovered.has(number) || candidates.some((c) => c.number === number))
+      .filter(([number]) => candidateNumbers.has(number))
       .map(([number, reason]) => ({ number, reason })),
     openIssues: openNumbers,
     cap,
@@ -228,7 +230,7 @@ export function runEpicPipeline(options: PipelineOptions): PipelineResult {
   const planComment = findPlanComment(comments);
   const commentBefore = planComment ? extractNextUp(planComment.body) : [];
   const previousStatus = planComment ? extractStatusRegion(planComment.body) : "";
-  if (/pause|hard stop|do not spawn|hold/i.test(previousStatus)) {
+  if (carriesSpawnDirective(previousStatus)) {
     notes.push(
       "previous status block carries a spawn directive (pause/hold) — review it with the user BEFORE spawning anything",
     );
@@ -279,10 +281,4 @@ export function runEpicPipeline(options: PipelineOptions): PipelineResult {
     dryRun: options.dryRun === true,
     notes,
   };
-}
-
-/** Sibling worktree path for an issue (spawn pre-flight check helper). */
-export function issueWorktreePathFor(cwd: string, issue: number): string {
-  const repoRoot = shellOrThrow(["git", "rev-parse", "--show-toplevel"], cwd);
-  return buildIssueWorktreePath(repoRoot, repoNameFromRoot(repoRoot), issue);
 }

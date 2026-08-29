@@ -152,7 +152,7 @@ export default function epicNextExtension(pi: ExtensionAPI) {
     ],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      const { rows } = runEpicCheck(ctx.cwd);
+      const rows = runEpicCheck(ctx.cwd);
       const lines =
         rows.length === 0
           ? ["No in-flight epic work found (no imp-* agents, issue worktrees, or open issue PRs)."]
@@ -200,7 +200,7 @@ export default function epicNextExtension(pi: ExtensionAPI) {
   pi.registerCommand("epic-check", {
     description: "Show live status of in-flight epic agents, worktrees, and PRs",
     handler: async (_args, ctx) => {
-      const { rows } = runEpicCheck(ctx.cwd);
+      const rows = runEpicCheck(ctx.cwd);
       const text =
         rows.length === 0
           ? "No in-flight epic work found."

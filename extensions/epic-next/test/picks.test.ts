@@ -107,6 +107,15 @@ describe("computeNextPicks", () => {
     expect(result.blocked).toHaveLength(1);
     expect(result.ready).toEqual([]);
   });
+
+  it("rejects a non-positive cap", () => {
+    expect(() =>
+      computeNextPicks({ candidates: [], inFlight: [], openIssues: new Set(), cap: 0 }),
+    ).toThrow(/cap/);
+    expect(() =>
+      computeNextPicks({ candidates: [], inFlight: [], openIssues: new Set(), cap: -1 }),
+    ).toThrow(/cap/);
+  });
 });
 
 describe("filesOverlap", () => {

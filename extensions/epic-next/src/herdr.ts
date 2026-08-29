@@ -1,4 +1,5 @@
 import { AGENT_START_TIMEOUT_MS } from "./constants";
+import { expectArray, getPath, parseJsonValue } from "./json";
 import { shell, shellOrThrow, type ShellResult } from "./shell";
 
 export type HerdrAgent = {
@@ -19,37 +20,26 @@ export function isHerdrEnv(): boolean {
   return process.env.HERDR_ENV === "1";
 }
 
-function parseJson(output: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(output) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 /** Parse `herdr agent list` output (agent entries under .result.agents). */
 export function parseAgentList(output: string): HerdrAgent[] {
-  const parsed = parseJson(output);
-  const result = parsed?.result as { agents?: unknown[] } | undefined;
-  const agents = Array.isArray(result?.agents) ? result.agents : [];
-  return agents.flatMap((raw) => {
-    const agent = raw as {
-      name?: string;
-      pane_id?: string;
-      cwd?: string;
-      agent_status?: string;
-      tab_id?: string;
-    };
-    if (typeof agent.pane_id !== "string") {
+  const agentsRaw = getPath(parseJsonValue(output, "herdr agent list"), "result", "agents");
+  const agents = Array.isArray(agentsRaw) ? agentsRaw : [];
+  return expectArray(agents, "herdr agent list agents").flatMap((raw) => {
+    const paneId = getPath(raw, "pane_id");
+    const name = getPath(raw, "name");
+    const cwd = getPath(raw, "cwd");
+    const status = getPath(raw, "agent_status");
+    const tabId = getPath(raw, "tab_id");
+    if (typeof paneId !== "string") {
       return [];
     }
     return [
       {
-        name: typeof agent.name === "string" ? agent.name : null,
-        paneId: agent.pane_id,
-        cwd: typeof agent.cwd === "string" ? agent.cwd : "",
-        status: typeof agent.agent_status === "string" ? agent.agent_status : "unknown",
-        tabId: typeof agent.tab_id === "string" ? agent.tab_id : "",
+        name: typeof name === "string" ? name : null,
+        paneId,
+        cwd: typeof cwd === "string" ? cwd : "",
+        status: typeof status === "string" ? status : "unknown",
+        tabId: typeof tabId === "string" ? tabId : "",
       },
     ];
   });
@@ -57,28 +47,27 @@ export function parseAgentList(output: string): HerdrAgent[] {
 
 /** Parse `herdr pane layout --current` output (.result.layout). */
 export function parsePaneLayout(output: string): HerdrPaneLayout {
-  const parsed = parseJson(output);
-  const layout = (parsed?.result as { layout?: unknown } | undefined)?.layout as
-    | { area?: { width?: number }; panes?: unknown[] }
-    | undefined;
-  const panes = Array.isArray(layout?.panes) ? layout.panes : [];
+  const layout = getPath(parseJsonValue(output, "herdr pane layout"), "result", "layout");
+  const width = getPath(layout, "area", "width");
+  const panesRaw = getPath(layout, "panes");
+  const panes = Array.isArray(panesRaw) ? panesRaw : [];
   return {
-    totalWidth: typeof layout?.area?.width === "number" ? layout.area.width : 0,
-    panes: panes.flatMap((raw) => {
-      const pane = raw as { pane_id?: string; rect?: { width?: number } };
-      if (typeof pane.pane_id !== "string" || typeof pane.rect?.width !== "number") {
+    totalWidth: typeof width === "number" ? width : 0,
+    panes: expectArray(panes, "herdr pane layout panes").flatMap((raw) => {
+      const paneId = getPath(raw, "pane_id");
+      const paneWidth = getPath(raw, "rect", "width");
+      if (typeof paneId !== "string" || typeof paneWidth !== "number") {
         return [];
       }
-      return [{ paneId: pane.pane_id, width: pane.rect.width }];
+      return [{ paneId, width: paneWidth }];
     }),
   };
 }
 
 /** Parse `herdr pane split` output (.result.pane.pane_id). */
 export function parseSplitPaneId(output: string): string | null {
-  const parsed = parseJson(output);
-  const result = parsed?.result as { pane?: { pane_id?: string } } | undefined;
-  return typeof result?.pane?.pane_id === "string" ? result.pane.pane_id : null;
+  const paneId = getPath(parseJsonValue(output, "herdr pane split"), "result", "pane", "pane_id");
+  return typeof paneId === "string" ? paneId : null;
 }
 
 export function herdrAgentList(): HerdrAgent[] {
@@ -94,19 +83,20 @@ export function herdrAgentGet(name: string): HerdrAgent | null {
   if (result.exitCode !== 0) {
     return null;
   }
-  const parsed = parseJson(result.stdout);
-  const agent = (parsed?.result as { agent?: unknown } | undefined)?.agent as
-    | { pane_id?: string; cwd?: string; agent_status?: string; name?: string; tab_id?: string }
-    | undefined;
-  if (!agent || typeof agent.pane_id !== "string") {
+  const agent = getPath(parseJsonValue(result.stdout, "herdr agent get"), "result", "agent");
+  const paneId = getPath(agent, "pane_id");
+  if (typeof paneId !== "string") {
     return null;
   }
+  const cwd = getPath(agent, "cwd");
+  const status = getPath(agent, "agent_status");
+  const tabId = getPath(agent, "tab_id");
   return {
-    name: typeof agent.name === "string" ? agent.name : name,
-    paneId: agent.pane_id,
-    cwd: typeof agent.cwd === "string" ? agent.cwd : "",
-    status: typeof agent.agent_status === "string" ? agent.agent_status : "unknown",
-    tabId: typeof agent.tab_id === "string" ? agent.tab_id : "",
+    name,
+    paneId,
+    cwd: typeof cwd === "string" ? cwd : "",
+    status: typeof status === "string" ? status : "unknown",
+    tabId: typeof tabId === "string" ? tabId : "",
   };
 }
 

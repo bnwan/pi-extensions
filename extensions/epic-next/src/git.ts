@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 
 export type GitWorktree = {
   path: string;
@@ -74,13 +74,20 @@ export function parseOwnerRepo(remoteUrl: string): string | null {
   return `${owner}/${repo}`;
 }
 
-/** Extract an issue number from a branch name like `markky/issue-866`, `issue-866`, or `issue-866-slug`. */
+/**
+ * Extract an issue number from a branch name like `markky/issue-866`,
+ * `issue-866`, or `issue-866-slug`. `issue-<n>` must start a branch segment
+ * so names like `feature/anti-issue-42` are NOT matched.
+ */
 export function issueFromBranch(branch: string): number | null {
-  const match = branch.match(/(?:^|\/|-)issue-(\d+)/);
+  const match = branch.match(/(?:^|\/)issue-(\d+)/);
   return match ? Number(match[1]) : null;
 }
 
-/** Extract an issue number from a worktree path like `../markky-issue-866`. */
+/**
+ * Extract an issue number from a worktree path like `../markky-issue-866`.
+ * Paths use the `<repo>-issue-<n>` shape, so a leading `-` is accepted here.
+ */
 export function issueFromWorktreePath(path: string): number | null {
   const match = path.match(/(?:^|\/|-)issue-(\d+)/);
   return match ? Number(match[1]) : null;
@@ -91,9 +98,13 @@ export function buildIssueBranch(repoName: string, issue: number): string {
   return `${repoName}/issue-${issue}`;
 }
 
-/** Issue worktree path per the epic-next skill: sibling `<repo>-issue-<n>` of the repo root. */
+/**
+ * Issue worktree path per the epic-next skill: sibling `<repo>-issue-<n>` of
+ * the repo root — RESOLVED (no `..` segment) so it compares equal to the
+ * paths herdr and `git worktree list` report.
+ */
 export function buildIssueWorktreePath(repoRoot: string, repoName: string, issue: number): string {
-  return `${repoRoot}/../${repoName}-issue-${issue}`;
+  return resolve(repoRoot, "..", `${repoName}-issue-${issue}`);
 }
 
 /** Repository name from its root path. */

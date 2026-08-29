@@ -1,4 +1,4 @@
-import { sharedInfraMatches } from "./picks";
+import { highRiskMatches, sharedInfraMatches } from "./picks";
 import type { PicksResult } from "./types";
 
 export type ReportInput = {
@@ -58,7 +58,7 @@ export function buildReport(input: ReportInput): string {
         lines.push(`  #${pick.number} — unblocks ${pick.unblocks.map((n) => `#${n}`).join(", ")}`);
       }
       if (pick.highRisk) {
-        const globs = sharedInfraMatches(pick.files).join(", ");
+        const globs = highRiskMatches(pick.files).join(", ");
         lines.push(
           `  #${pick.number} — HIGH-RISK${globs ? ` (${globs})` : ""} — recommend --gate (stop before PR)`,
         );
