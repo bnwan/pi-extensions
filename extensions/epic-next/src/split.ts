@@ -3,6 +3,14 @@ export type SplitPlan = {
   ratio: number;
 };
 
+export type EvenStep = {
+  /** Pane whose edge the resize moves. */
+  pane: string;
+  direction: "left" | "right" | "up" | "down";
+  /** `herdr pane resize --amount` moves a boundary by this ratio DELTA of the split's container width. */
+  amount: number;
+};
+
 /**
  * Compute the pane-split plan that keeps all panes equal width (skill Step 6):
  * split the WIDEST existing pane with a ratio so the new pane ends up
@@ -50,4 +58,70 @@ function clamp(value: number, min: number, max: number): number {
 
 function round4(value: number): number {
   return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * Compute the `herdr pane resize` steps that even a flat column layout: every
+ * pane ends at totalWidth/panes, repairing drift from teardowns, manual
+ * resizes, and failed-spawn retries.
+ *
+ * Steps live in RATIO space, not cell space: `herdr pane resize --amount` is a
+ * ratio DELTA of the split's container, and herdr keeps nested split ratios
+ * constant while their container resizes — so ratio-space steps are genuinely
+ * order-independent (a boundary move never changes another split's ratio).
+ * Each split's target ratio is panes-left-of-the-boundary / panes-in-its-
+ * container, read off the final equal-column layout; the amount is
+ * |target − current|. A boundary needing less than one cell of movement
+ * produces no step (rounding noise).
+ *
+ * Only flat same-direction trees are evened (the epic flow's shape): a mixed
+ * right+down tree, or a split count that doesn't match the panes, bails out
+ * with a skip reason instead of guessing.
+ */
+export function computeEvenSteps(input: {
+  areaX: number;
+  totalWidth: number;
+  panes: { paneId: string; x: number; width: number }[];
+  splits: { direction: "right" | "down"; ratio: number; x: number; width: number }[];
+}): { steps: EvenStep[]; skipped: string | null } {
+  const panes = [...input.panes].sort((a, b) => a.x - b.x);
+  if (panes.length <= 1) {
+    return { steps: [], skipped: null };
+  }
+  if (input.splits.length !== panes.length - 1) {
+    return {
+      steps: [],
+      skipped: `unexpected split tree (${input.splits.length} splits for ${panes.length} panes)`,
+    };
+  }
+  if (input.splits.some((split) => split.direction !== "right")) {
+    return { steps: [], skipped: "layout has non-column splits — even-out out of scope" };
+  }
+
+  const steps: EvenStep[] = [];
+  for (const split of input.splits) {
+    const containerRight = split.x + split.width;
+    const inContainer = panes.filter(
+      (pane) => pane.x >= split.x - 1 && pane.x + pane.width <= containerRight + 1,
+    );
+    if (inContainer.length < 2) {
+      continue; // container doesn't wrap at least two panes — leave it
+    }
+    const boundary = split.x + split.ratio * split.width;
+    const leftCount = inContainer.filter((pane) => pane.x + pane.width <= boundary + 1).length;
+    if (leftCount < 1 || leftCount >= inContainer.length) {
+      continue; // boundary not interior — leave it
+    }
+    const delta = leftCount / inContainer.length - split.ratio;
+    if (Math.abs(delta * split.width) < 1) {
+      continue; // within a cell — rounding noise
+    }
+    const amount = round4(Math.min(1, Math.abs(delta)));
+    steps.push(
+      delta > 0
+        ? { pane: inContainer[leftCount - 1].paneId, direction: "right", amount }
+        : { pane: inContainer[leftCount].paneId, direction: "left", amount },
+    );
+  }
+  return { steps, skipped: null };
 }

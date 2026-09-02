@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildEvenLayoutArgs, parseAgentList, parsePaneLayout, parseSplitPaneId } from "../src/herdr";
+import { parseAgentList, parsePaneLayout, parseSplitPaneId } from "../src/herdr";
 
 // Captured live from herdr 0.8.2 (2026-08-29).
 const LIVE_AGENT_LIST = JSON.stringify({
@@ -106,6 +106,13 @@ describe("parsePaneLayout", () => {
         { paneId: "wA:p1", width: 81 },
         { paneId: "wA:p8", width: 81 },
       ],
+      area: { x: 26, width: 162 },
+      paneRects: [
+        { paneId: "wA:p1", x: 26, width: 81 },
+        { paneId: "wA:p8", x: 107, width: 81 },
+      ],
+      splits: [{ direction: "right", ratio: 0.49999997, x: 26, width: 162 }],
+      zoomed: false,
     });
   });
 
@@ -113,6 +120,10 @@ describe("parsePaneLayout", () => {
     expect(parsePaneLayout(JSON.stringify({ result: { layout: {} } }))).toEqual({
       totalWidth: 0,
       panes: [],
+      area: { x: 0, width: 0 },
+      paneRects: [],
+      splits: [],
+      zoomed: false,
     });
   });
 
@@ -133,15 +144,5 @@ describe("parseSplitPaneId", () => {
 
   it("throws a clear error on malformed JSON", () => {
     expect(() => parseSplitPaneId("not json")).toThrow(/Failed to parse herdr pane split/);
-  });
-});
-
-describe("buildEvenLayoutArgs", () => {
-  it("evens columns for the default right split direction", () => {
-    expect(buildEvenLayoutArgs("right")).toEqual(["tmux", "select-layout", "even-horizontal"]);
-  });
-
-  it("evens rows for the down split direction", () => {
-    expect(buildEvenLayoutArgs("down")).toEqual(["tmux", "select-layout", "even-vertical"]);
   });
 });

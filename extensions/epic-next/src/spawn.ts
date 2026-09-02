@@ -76,20 +76,27 @@ export function spawnPick(options: SpawnOptions): SpawnRecord {
     // Sibling pane in the current tab, equal-width via split ratios.
     notify("Splitting a sibling pane…");
     const direction = options.direction ?? "right";
+    const remaining = Math.max(1, options.remaining ?? 1);
     // Repair accumulated drift (teardowns, manual resizes, failed-spawn
     // retries) FIRST so the widest-pane split math starts from a uniform
     // layout and lands exactly equal for every pane, not just the split pair.
-    const even = herdrPaneEvenLayout(direction);
-    if (even.exitCode !== 0) {
-      notify(
-        `Layout even-out skipped (${(even.stderr || even.stdout).trim() || "tmux unavailable"}) — falling back to widest-pane split`,
-      );
+    // Only for serial spawns: with remaining > 1 the layout is the expected
+    // intermediate state of this invocation's split plan — even-ing it would
+    // break computeSplitPlan's remaining math. Only apply when remaining === 1.
+    if (remaining === 1) {
+      const even = herdrPaneEvenLayout(direction);
+      if (even.skipped !== null) {
+        notify(`Layout even-out skipped: ${even.skipped}`);
+      }
+      for (const note of even.notes) {
+        notify(`Layout even-out: ${note}`);
+      }
     }
     const layout = herdrPaneLayout();
     const plan = computeSplitPlan(
       layout.panes,
       layout.totalWidth,
-      Math.max(1, options.remaining ?? 1),
+      remaining,
     );
     pane = herdrPaneSplit({
       pane: plan.paneId,

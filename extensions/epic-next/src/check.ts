@@ -99,11 +99,12 @@ export function teardownIssue(issue: number, cwd: string): TeardownResult {
         // tmux hands the closed pane's space to one neighbor, not evenly —
         // redistribute so the surviving panes stay equal-width. Direction is
         // the epic flow's documented default (equal columns); a "down"
-        // (row-split) tab gets flattened here.
+        // (row-split) tab is reported as skipped rather than flattened.
         const even = herdrPaneEvenLayout("right");
-        if (even.exitCode !== 0) {
-          notes.push(`layout even-out failed: ${(even.stderr || even.stdout).trim()}`);
+        if (even.skipped !== null) {
+          notes.push(`layout even-out skipped: ${even.skipped}`);
         }
+        notes.push(...even.notes);
       }
     } else {
       notes.push(

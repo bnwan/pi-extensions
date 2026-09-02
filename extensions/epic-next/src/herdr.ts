@@ -1,5 +1,6 @@
 import { AGENT_START_TIMEOUT_MS } from "./constants";
 import { expectArray, getPath, parseJsonValue } from "./json";
+import { computeEvenSteps, type EvenStep } from "./split";
 import { shell, shellOrThrow, type ShellResult } from "./shell";
 
 export type HerdrAgent = {
@@ -13,6 +14,11 @@ export type HerdrAgent = {
 export type HerdrPaneLayout = {
   totalWidth: number;
   panes: { paneId: string; width: number }[];
+  /** Full layout detail for even-out planning. */
+  area: { x: number; width: number };
+  paneRects: { paneId: string; x: number; width: number }[];
+  splits: { direction: "right" | "down"; ratio: number; x: number; width: number }[];
+  zoomed: boolean;
 };
 
 /** The epic-next extension drives herdr through its CLI. */
@@ -48,19 +54,51 @@ export function parseAgentList(output: string): HerdrAgent[] {
 /** Parse `herdr pane layout --current` output (.result.layout). */
 export function parsePaneLayout(output: string): HerdrPaneLayout {
   const layout = getPath(parseJsonValue(output, "herdr pane layout"), "result", "layout");
+  const areaX = getPath(layout, "area", "x");
   const width = getPath(layout, "area", "width");
   const panesRaw = getPath(layout, "panes");
   const panes = Array.isArray(panesRaw) ? panesRaw : [];
+  const paneRects = expectArray(panes, "herdr pane layout panes").flatMap((raw) => {
+    const paneId = getPath(raw, "pane_id");
+    const rect = getPath(raw, "rect");
+    const x = getPath(rect, "x");
+    const paneWidth = getPath(rect, "width");
+    if (typeof paneId !== "string" || typeof paneWidth !== "number" || typeof x !== "number") {
+      return [];
+    }
+    return [{ paneId, x, width: paneWidth }];
+  });
+  const splitsRaw = getPath(layout, "splits");
+  const splits = Array.isArray(splitsRaw) ? splitsRaw : [];
+  const splitRects = expectArray(splits, "herdr pane layout splits").flatMap(
+    (
+      raw,
+    ): { direction: "right" | "down"; ratio: number; x: number; width: number }[] => {
+      const direction = getPath(raw, "direction");
+      const ratio = getPath(raw, "ratio");
+      const rect = getPath(raw, "rect");
+      const x = getPath(rect, "x");
+      const splitWidth = getPath(rect, "width");
+      if (typeof direction === "string" && (direction === "right" || direction === "down")) {
+        if (typeof ratio !== "number" || typeof x !== "number" || typeof splitWidth !== "number") {
+          return [];
+        }
+        return [{ direction, ratio, x, width: splitWidth }];
+      }
+      return [];
+    },
+  );
+  const zoomed = getPath(layout, "zoomed");
   return {
     totalWidth: typeof width === "number" ? width : 0,
-    panes: expectArray(panes, "herdr pane layout panes").flatMap((raw) => {
-      const paneId = getPath(raw, "pane_id");
-      const paneWidth = getPath(raw, "rect", "width");
-      if (typeof paneId !== "string" || typeof paneWidth !== "number") {
-        return [];
-      }
-      return [{ paneId, width: paneWidth }];
-    }),
+    panes: paneRects.map((pane) => ({ paneId: pane.paneId, width: pane.width })),
+    area: {
+      x: typeof areaX === "number" ? areaX : 0,
+      width: typeof width === "number" ? width : 0,
+    },
+    paneRects,
+    splits: splitRects,
+    zoomed: zoomed === true,
   };
 }
 
@@ -104,22 +142,75 @@ export function herdrPaneLayout(): HerdrPaneLayout {
   return parsePaneLayout(shellOrThrow(["herdr", "pane", "layout", "--current"]));
 }
 
-/** Build the tmux select-layout argv that evens panes for a split direction. */
-export function buildEvenLayoutArgs(direction: "right" | "down"): string[] {
-  return ["tmux", "select-layout", direction === "down" ? "even-vertical" : "even-horizontal"];
-}
+export type HerdrPaneEvenResult = {
+  /** Number of resize steps applied. */
+  applied: number;
+  /** Structural bail-out reason (null when the even-out ran or was a no-op). */
+  skipped: string | null;
+  /** Per-step failures (best-effort: one failed step doesn't stop the rest). */
+  notes: string[];
+};
 
 /**
  * Best-effort drift repair: redistribute pane space evenly across the current
- * tmux window (the epic tab this process runs in). tmux's default pane-close
- * behavior hands the freed space to one neighbor, and serial re-spawns only
- * equalize the two panes each split touches — so layout drift accumulates over
- * a merge/teardown cycle. Even-out at the transitions (post-close, pre-split)
- * keeps every pane at totalWidth/panes. Failure is non-fatal: drift repair is
- * never worth blocking a spawn/teardown for.
+ * tab. A pane close hands the freed space to one neighbor rather than evenly,
+ * and serial re-spawns only equalize the two panes each split touches — so
+ * layout drift accumulates over a merge/teardown cycle. Even-out at the
+ * transitions (post-close, pre-split) keeps every pane at totalWidth/panes.
+ *
+ * Implemented with `herdr pane resize` (herdr embeds its own tmux — there is
+ * no standalone tmux binary to select-layout with). Never fatal: a failed or
+ * skipped even-out is reported, not thrown.
  */
-export function herdrPaneEvenLayout(direction: "right" | "down"): ShellResult {
-  return shell(buildEvenLayoutArgs(direction));
+export function herdrPaneEvenLayout(direction: "right" | "down"): HerdrPaneEvenResult {
+  const notes: string[] = [];
+  let layout: HerdrPaneLayout;
+  try {
+    layout = herdrPaneLayout();
+  } catch (error) {
+    return {
+      applied: 0,
+      skipped: `layout read failed: ${error instanceof Error ? error.message : String(error)}`,
+      notes,
+    };
+  }
+  if (layout.zoomed) {
+    return { applied: 0, skipped: "tab is zoomed — even-out skipped", notes };
+  }
+  if (direction === "down") {
+    return { applied: 0, skipped: "row (direction 'down') even-out not implemented", notes };
+  }
+  const plan = computeEvenSteps({
+    areaX: layout.area.x,
+    totalWidth: layout.area.width,
+    panes: layout.paneRects,
+    splits: layout.splits,
+  });
+  if (plan.skipped !== null) {
+    return { applied: 0, skipped: plan.skipped, notes };
+  }
+  let applied = 0;
+  for (const step of plan.steps) {
+    const result = shell([
+      "herdr",
+      "pane",
+      "resize",
+      "--pane",
+      step.pane,
+      "--direction",
+      step.direction,
+      "--amount",
+      String(step.amount),
+    ]);
+    if (result.exitCode === 0) {
+      applied += 1;
+    } else {
+      notes.push(
+        `resize ${step.pane} ${step.direction} ${step.amount} failed: ${(result.stderr || result.stdout).trim()}`,
+      );
+    }
+  }
+  return { applied, skipped: null, notes };
 }
 
 export function herdrPaneSplit(options: {
