@@ -104,6 +104,24 @@ export function herdrPaneLayout(): HerdrPaneLayout {
   return parsePaneLayout(shellOrThrow(["herdr", "pane", "layout", "--current"]));
 }
 
+/** Build the tmux select-layout argv that evens panes for a split direction. */
+export function buildEvenLayoutArgs(direction: "right" | "down"): string[] {
+  return ["tmux", "select-layout", direction === "down" ? "even-vertical" : "even-horizontal"];
+}
+
+/**
+ * Best-effort drift repair: redistribute pane space evenly across the current
+ * tmux window (the epic tab this process runs in). tmux's default pane-close
+ * behavior hands the freed space to one neighbor, and serial re-spawns only
+ * equalize the two panes each split touches — so layout drift accumulates over
+ * a merge/teardown cycle. Even-out at the transitions (post-close, pre-split)
+ * keeps every pane at totalWidth/panes. Failure is non-fatal: drift repair is
+ * never worth blocking a spawn/teardown for.
+ */
+export function herdrPaneEvenLayout(direction: "right" | "down"): ShellResult {
+  return shell(buildEvenLayoutArgs(direction));
+}
+
 export function herdrPaneSplit(options: {
   pane: string;
   direction: "right" | "down";

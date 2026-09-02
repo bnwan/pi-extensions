@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAgentList, parsePaneLayout, parseSplitPaneId } from "../src/herdr";
+import { buildEvenLayoutArgs, parseAgentList, parsePaneLayout, parseSplitPaneId } from "../src/herdr";
 
 // Captured live from herdr 0.8.2 (2026-08-29).
 const LIVE_AGENT_LIST = JSON.stringify({
@@ -133,5 +133,15 @@ describe("parseSplitPaneId", () => {
 
   it("throws a clear error on malformed JSON", () => {
     expect(() => parseSplitPaneId("not json")).toThrow(/Failed to parse herdr pane split/);
+  });
+});
+
+describe("buildEvenLayoutArgs", () => {
+  it("evens columns for the default right split direction", () => {
+    expect(buildEvenLayoutArgs("right")).toEqual(["tmux", "select-layout", "even-horizontal"]);
+  });
+
+  it("evens rows for the down split direction", () => {
+    expect(buildEvenLayoutArgs("down")).toEqual(["tmux", "select-layout", "even-vertical"]);
   });
 });

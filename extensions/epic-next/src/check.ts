@@ -8,7 +8,7 @@ import {
   repoNameFromRoot,
 } from "./git";
 import { findMergedPR, listOpenPRs } from "./github";
-import { herdrAgentGet, herdrAgentList, herdrPaneClose } from "./herdr";
+import { herdrAgentGet, herdrAgentList, herdrPaneClose, herdrPaneEvenLayout } from "./herdr";
 import { shell, shellOrThrow } from "./shell";
 import type { CheckRow } from "./types";
 
@@ -95,6 +95,15 @@ export function teardownIssue(issue: number, cwd: string): TeardownResult {
       closedPane = close.exitCode === 0 ? agent.paneId : null;
       if (!closedPane) {
         notes.push(`pane close failed for ${agent.paneId}: ${close.stderr || close.stdout}`);
+      } else {
+        // tmux hands the closed pane's space to one neighbor, not evenly —
+        // redistribute so the surviving panes stay equal-width. Direction is
+        // the epic flow's documented default (equal columns); a "down"
+        // (row-split) tab gets flattened here.
+        const even = herdrPaneEvenLayout("right");
+        if (even.exitCode !== 0) {
+          notes.push(`layout even-out failed: ${(even.stderr || even.stdout).trim()}`);
+        }
       }
     } else {
       notes.push(

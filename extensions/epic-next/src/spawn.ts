@@ -12,6 +12,7 @@ import {
   herdrAgentPrompt,
   herdrAgentStart,
   herdrPaneClose,
+  herdrPaneEvenLayout,
   herdrPaneLayout,
   herdrPaneSplit,
   isAgentStartTimeout,
@@ -74,6 +75,16 @@ export function spawnPick(options: SpawnOptions): SpawnRecord {
   try {
     // Sibling pane in the current tab, equal-width via split ratios.
     notify("Splitting a sibling pane…");
+    const direction = options.direction ?? "right";
+    // Repair accumulated drift (teardowns, manual resizes, failed-spawn
+    // retries) FIRST so the widest-pane split math starts from a uniform
+    // layout and lands exactly equal for every pane, not just the split pair.
+    const even = herdrPaneEvenLayout(direction);
+    if (even.exitCode !== 0) {
+      notify(
+        `Layout even-out skipped (${(even.stderr || even.stdout).trim() || "tmux unavailable"}) — falling back to widest-pane split`,
+      );
+    }
     const layout = herdrPaneLayout();
     const plan = computeSplitPlan(
       layout.panes,
@@ -82,7 +93,7 @@ export function spawnPick(options: SpawnOptions): SpawnRecord {
     );
     pane = herdrPaneSplit({
       pane: plan.paneId,
-      direction: options.direction ?? "right",
+      direction,
       ratio: plan.ratio,
       cwd: worktree,
     });
@@ -138,6 +149,10 @@ export function spawnPick(options: SpawnOptions): SpawnRecord {
     // re-spawns): close the pane we split (kills a started agent), remove the
     // worktree, delete the branch.
     const paneClose = pane !== null ? herdrPaneClose(pane) : null;
+    if (pane !== null && paneClose !== null && paneClose.exitCode === 0) {
+      // Restore the pre-spawn widths so a failed attempt is a visual no-op.
+      herdrPaneEvenLayout(options.direction ?? "right");
+    }
     const removeWorktree = shell(["git", "worktree", "remove", "--force", worktree], repoRoot);
     const deleteBranch = shell(["git", "branch", "-D", branch], repoRoot);
     const rollback =
